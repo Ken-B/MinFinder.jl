@@ -4,7 +4,7 @@
 
 ## About
 
-This package came about from a [pull request](https://github.com/JuliaOpt/Optim.jl/pull/73) for the `Optim.jl` package. The idea is to develop this minfinder functionality separate for now until the `Optim.jl` API for bound-constrained optimization is finished. Also, for now julia v0.2 is not to supported with v0.3 on the horizon.
+This package originated from a [pull request](https://github.com/JuliaOpt/Optim.jl/pull/73) for the `Optim.jl` package. The idea is to develop this minfinder functionality separate for now until the `Optim.jl` API for bound-constrained optimization is finished. Also, for now julia v0.2 is not to supported with v0.3 on the horizon.
 
 I have some ideas for seome extra features, but do let me know in the issues if you have more! For example:
 * use low-discrepancy samples for starting point sampling, like from the `Sobol.jl` package
