@@ -1,3 +1,4 @@
+println("Testing MinFinder started.")
 using MinFinder
 using Base.Test
 
