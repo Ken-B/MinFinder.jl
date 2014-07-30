@@ -1,6 +1,6 @@
 # Minfinder
 
-[![Build Status](https://travis-ci.org/Ken-B/MinfFnder.jl.svg?branch=master)](https://travis-ci.org/Ken-B/Minfinder.jl)
+[![Build Status](https://travis-ci.org/Ken-B/MinFinder.jl.svg?branch=master)](https://travis-ci.org/Ken-B/Minfinder.jl)
 
 ## About
 
