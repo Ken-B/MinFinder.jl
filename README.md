@@ -16,7 +16,9 @@ I have some ideas for seome extra features, but do let me know in the issues if 
 
 The [MinFinder algorithm](www.cs.uoi.gr/~lagaris/papers/MINF.pdf) solves those problems where you need to find all the minima for a differentiable function inside a bounded domain. It launches many local optimizations with `fminbox` (in the `Optim.jl` package) from a set of random starting points in the search domain, after some preselection of the points and until a stopping criteria is hit.
 
-For example, the Six Hump Camel Back function has 6 minima inside [-5, 5]²:
+Have a good look at [the conjugate gradient section of Optim.jl](https://github.com/JuliaOpt/Optim.jl#conjugate-gradients-box-minimization-and-nonnegative-least-squares), because of the non-obvious way to pass your function.
+
+As an example, consider the Six Hump Camel Back function with 6 minima inside [-5, 5]²:
 
     function camel(g, x::Vector)
         if !(g === nothing)
