@@ -1,7 +1,6 @@
 module MinFinder
 
     using Optim
-    using OptionsMod
 
     export minfinder
 

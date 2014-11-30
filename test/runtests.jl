@@ -22,7 +22,6 @@ function test_multiple(problem::MinFinder.MultipleMinimaProblems.OptimizationPro
             end
         end
         #foundmin || println(name, m)
-        #@assert foundmin
         @assert foundmin
     end
 end

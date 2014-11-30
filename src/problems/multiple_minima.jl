@@ -1,11 +1,12 @@
 module MultipleMinimaProblems
 
-# Test problems with multiple minima from paper and from:
+# Test problems with multiple minima from MinFinder paper and from:
 # http://www2.compute.dtu.dk/~kajm/Test_ex_forms/test_ex.html
+using Optim #for DifferentiableFunction
 
 immutable OptimizationProblem
     name::ASCIIString
-    f::Function
+    f::Optim.DifferentiableFunction 
     l::Vector
     u::Vector
     minima# Vector with all local minima
@@ -18,16 +19,19 @@ examples = Dict{ASCIIString, OptimizationProblem}()
 ## Rosenbrock ##
 examples["Rosenbrock"] = OptimizationProblem(
     "Rosenbrock",
-    function rosenbrock(g, x::Vector)
-        d1 = 1.0 - x[1]
-        d2 = x[2] - x[1]^2
-        if !(g === nothing)
-            g[1] = -2.0*d1 - 400.0*d2*x[1]
-            g[2] = 200.0*d2
-        end
-        val = d1^2 + 100.0 * d2^2
-        return val
-    end,
+    Optim.DifferentiableFunction(
+        x -> (1.0 - x[1])^2 + 100.0 * (x[2] - x[1]^2)^2,
+        (x, g) -> begin
+            g[1] = -2.0 * (1.0 - x[1]) - 400.0 * (x[2] - x[1]^2) * x[1]
+            g[2] = 200.0 * (x[2] - x[1]^2)
+        end,
+        (x, g) -> begin
+            d1 = (1.0 - x[1])
+            d2 = (x[2] - x[1]^2)
+            g[1] = -2.0 * d1 - 400.0 * d2 * x[1]
+            g[2] = 200.0 * d2
+            return d1^2 + 100.0 * d2^2
+        end),
     [-2., -2],
     [2.,2],
     {[1.,1.]},
@@ -36,13 +40,18 @@ examples["Rosenbrock"] = OptimizationProblem(
 ## Camel ##
 examples["Camel"] = OptimizationProblem(
     "Camel",
-    function camel(g, x::Vector)
-        if !(g === nothing)            
+    Optim.DifferentiableFunction(
+        x -> 4x[1]^2 - 2.1x[1]^4 + 1/3*x[1]^6 + x[1]*x[2] - 4x[2]^2 + 4x[2]^4,
+        function camel_g!(x,g)
             g[1] = 8x[1] - 8.4x[1]^3 + 2x[1]^5 + x[2]
             g[2] = x[1] - 8x[2] + 16x[2]^3
-        end
-        return 4x[1]^2 - 2.1x[1]^4 + 1/3*x[1]^6 + x[1]*x[2] - 4x[2]^2 + 4x[2]^4
-    end,
+            return nothing
+        end,
+        function camel_fg!(x, g)
+            g[1] = 8x[1] - 8.4x[1]^3 + 2x[1]^5 + x[2]
+            g[2] = x[1] - 8x[2] + 16x[2]^3
+            return 4x[1]^2 - 2.1x[1]^4 + 1/3*x[1]^6 + x[1]*x[2] - 4x[2]^2 + 4x[2]^4
+        end),
     [-5., -5],
     [5., 5],
     {[-0.0898416,0.712656],[0.089839,-0.712656], [-1.6071,-0.568651], 
@@ -52,13 +61,18 @@ examples["Camel"] = OptimizationProblem(
 ## Rastrigin ##
 examples["Rastrigin"] = OptimizationProblem(
     "Rastrigin",
-    function rastrigin(g, x)
-        if !(g === nothing)
+    Optim.DifferentiableFunction(
+        x -> x[1]^2 + x[2]^2 - cos(18x[1]) - cos(18x[2]),
+        (x,g) -> begin
             g[1] = 2x[1] +18sin(18x[1])
             g[2] = 2x[2] +18sin(18x[2])
-        end
-        return x[1]^2 + x[2]^2 - cos(18x[1]) - cos(18x[2])
-    end,
+            return nothing
+        end,
+        (x,g) -> begin
+            g[1] = 2x[1] +18sin(18x[1])
+            g[2] = 2x[2] +18sin(18x[2])
+            return x[1]^2 + x[2]^2 - cos(18x[1]) - cos(18x[2])
+        end),
     [-1., -1],
     [1., 1],
     {[0.0,0.0],[0.34692,0.0],[-0.34693,0.0],[0.69384,0.0],[-0.69385,0.0],
@@ -78,31 +92,39 @@ examples["Rastrigin"] = OptimizationProblem(
 ## Shekel ##
 
 # can take parameter m = 5, 7 or 10
-function shekel(g, x::Vector; m=5)
-    length(x) == 4 || error("input needs to be 4-dimensional")
-    A = [4 4 4 4;
-         1 1 1 1;
-         8 8 8 8;
-         6 6 6 6;
-         3 7 3 7;
-         2 9 2 9;
-         5 5 3 3;
-         8 1 8 1;
-         6 2 6 2;
-         7 3.6 7 3.6]
-    c = [.1 .2 .2 .4 .4 .6 .3 .7 .5 .5]
-    if !(g === nothing)
-        for j = 1:4
-            g[j] = sum([2*(x[j] - A[i,j]) / 
-                (norm(x - vec(A[i,:]),2)^2 + c[i])^2 for i=1:m])
-        end
+const shekel_A =[4 4 4 4;
+                 1 1 1 1;
+                 8 8 8 8;
+                 6 6 6 6;
+                 3 7 3 7;
+                 2 9 2 9;
+                 5 5 3 3;
+                 8 1 8 1;
+                 6 2 6 2;
+                 7 3.6 7 3.6]
+const shekel_c = [.1 .2 .2 .4 .4 .6 .3 .7 .5 .5]
+
+shekel(x;m=5)=-sum([1/(norm(x - vec(shekel_A[i,:]),2)^2+shekel_c[i]) for i=1:m])
+function shekel_g!(x::Vector, g; m=5)
+    #length(x) == 4 || error("input needs to be 4-dimensional")
+    for j = 1:4
+        g[j] = sum([2*(x[j] - shekel_A[i,j]) / 
+            (norm(x - vec(shekel_A[i,:]),2)^2 + shekel_c[i])^2 for i=1:m])
     end
-    return -sum([1/(norm(x - vec(A[i,:]),2)^2 + c[i]) for i=1:m])
+    return nothing
+end
+function shekel_fg!(x::Vector, g; m=5)
+    #length(x) == 4 || error("input needs to be 4-dimensional")
+    for j = 1:4
+        g[j] = sum([2*(x[j] - shekel_A[i,j]) / 
+            (norm(x - vec(shekel_A[i,:]),2)^2 + shekel_c[i])^2 for i=1:m])
+    end
+    return -sum([1/(norm(x - vec(shekel_A[i,:]),2)^2 + shekel_c[i]) for i=1:m])
 end
 
 examples["Shekel5"] = OptimizationProblem(
     "Shekel5",
-    shekel,
+    Optim.DifferentiableFunction(shekel,shekel_g!,shekel_fg!),
     zeros(4),
     10*ones(4),
     {[4.00003,4.00013,4.00003,4.00013],[1.00013,1.00015,1.00013,1.00015],
@@ -112,7 +134,8 @@ examples["Shekel5"] = OptimizationProblem(
 
 examples["Shekel7"] = OptimizationProblem(
     "Shekel7",
-    (g,x)->shekel(g, x;m=7),
+    Optim.DifferentiableFunction(x->shekel(x;m=7),(x,g)->shekel_g!(x,g;m=7),
+        (x,g)->shekel_fg!(x,g;m=7)),
     zeros(4),
     10*ones(4),
     {[4.00057,4.00068,3.99948,3.9996],[1.00023,1.00027,1.00018,1.00022],
@@ -123,7 +146,8 @@ examples["Shekel7"] = OptimizationProblem(
 
 examples["Shekel10"] = OptimizationProblem(
     "Shekel10",
-    (g,x)->shekel(g, x;m=10),
+    Optim.DifferentiableFunction(x->shekel(x;m=10),(x,g)->shekel_g!(x,g;m=10),
+        (x,g)->shekel_fg!(x,g;m=10)),
     zeros(4),
     10*ones(4),
     {[1.00036,1.0003,1.00031,1.00025],[3.00127,7.00022,3.00073,6.99968],

@@ -4,10 +4,10 @@
 
 ## About
 
-This package originated from a [pull request](https://github.com/JuliaOpt/Optim.jl/pull/73) for the `Optim.jl` package. The idea is to develop this minfinder functionality separate for now until the `Optim.jl` API for bound-constrained optimization is finished. Also, for now julia v0.2 is not to supported with v0.3 on the horizon.
+This package originated from a [pull request](https://github.com/JuliaOpt/Optim.jl/pull/73) for the `Optim.jl` package. The idea is to develop this minfinder functionality separate for now until the `Optim.jl` API for bound-constrained optimization is finished. Only julia v0.3 is supported.
 
 I have some ideas for seome extra features, but do let me know in the issues if you have more! For example:
-* use low-discrepancy samples for starting point sampling, like from the `Sobol.jl` package
+* use low-discrepancy samples for starting point sampling, like from the [`Sobol.jl`](https://github.com/stevengj/Sobol.jl) package
 * implement 2 more stopping rules from the MinFinder 2.0 paper, as well as the extra sample checking rule without derivatitves.
 
 
@@ -16,19 +16,27 @@ I have some ideas for seome extra features, but do let me know in the issues if 
 
 The [MinFinder algorithm](www.cs.uoi.gr/~lagaris/papers/MINF.pdf) solves those problems where you need to find all the minima for a differentiable function inside a bounded domain. It launches many local optimizations with `fminbox` (in the `Optim.jl` package) from a set of random starting points in the search domain, after some preselection of the points and until a stopping criteria is hit.
 
-Have a good look at [the conjugate gradient section of Optim.jl](https://github.com/JuliaOpt/Optim.jl#conjugate-gradients-box-minimization-and-nonnegative-least-squares), because of the non-obvious way to pass your function.
+Have a good look at [the fminbox section of Optim.jl](https://github.com/JuliaOpt/Optim.jl#box-minimization), because you need to pass your function in a Optim.DifferentiableFunction type.
 
 As an example, consider the Six Hump Camel Back function with 6 minima inside [-5, 5]²:
 
-    function camel(g, x::Vector)
-        if !(g === nothing)
-            g[1] = 8x[1] - 8.4x[1]^3 + 2x[1]^5 + x[2]
-            g[2] = x[1] - 8x[2] + 16x[2]^3
-        end
-        return 4x[1]^2 - 2.1x[1]^4 + 1/3*x[1]^6 + x[1]*x[2] - 4x[2]^2 + 4x[2]^4
-    end
+	camel_f(x) = 4x[1]^2 - 2.1x[1]^4 + 1/3*x[1]^6 + x[1]*x[2] - 4x[2]^2 + 4x[2]^4
 
-    minima, fcount, searches, iteration = minfinder(camel, [-5, -5], [5, 5]; show_trace=true)
+	function camel_g!(x,g)
+	    g[1] = 8x[1] - 8.4x[1]^3 + 2x[1]^5 + x[2]
+	    g[2] = x[1] - 8x[2] + 16x[2]^3
+	    return nothing
+	end
+
+	function camel_fg!(x, g)
+	    g[1] = 8x[1] - 8.4x[1]^3 + 2x[1]^5 + x[2]
+	    g[2] = x[1] - 8x[2] + 16x[2]^3
+	    return 4x[1]^2 - 2.1x[1]^4 + 1/3*x[1]^6 + x[1]*x[2] - 4x[2]^2 + 4x[2]^4
+	end	
+
+	df = Optim.DifferentiableFunction(camel_f,camel_g!,camel_fg!)
+
+    minima, f_calls, g_calls, searches, steps = minfinder(camel, [-5, -5], [5, 5]; show_trace=true)
 
 The output `minima` is a vector with elements of type `SearchPoint`, each with fields `x` for location, `f` for function value and `g` for gradient.
 
