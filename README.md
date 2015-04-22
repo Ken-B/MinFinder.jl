@@ -36,7 +36,7 @@ As an example, consider the Six Hump Camel Back function with 6 minima inside [-
 
 	df = Optim.DifferentiableFunction(camel_f,camel_g!,camel_fg!)
 
-    minima, f_calls, g_calls, searches, steps = minfinder(camel, [-5, -5], [5, 5]; show_trace=true)
+    minima, f_calls, g_calls, searches, steps = minfinder(df, [-5, -5], [5, 5]; show_trace=true)
 
 The output `minima` is a vector with elements of type `SearchPoint`, each with fields `x` for location, `f` for function value and `g` for gradient.
 
