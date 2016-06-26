@@ -12,13 +12,13 @@ function test_multiple(problem::MinFinder.MultipleMinimaProblems.OptimizationPro
 
     srand(seed)
     res = Optim.optimize(problem.f, problem.l, problem.u, Fminfinder(); kwargs...)
-    mins = minimum(res)
+    mins = Optim.minimizer(res)
     @test length(mins) == length(problem.minima)
     #@assert length(mins)==length(problem.minima)
     for m in mins
         foundmin = false
         for i in 1:length(problem.minima)
-            if norm(m.x - problem.minima[i], 2) < 1e-4*length(problem.l)
+            if norm(m - problem.minima[i], 2) < 1e-4 * length(problem.l)
                 foundmin = true
             end
         end
