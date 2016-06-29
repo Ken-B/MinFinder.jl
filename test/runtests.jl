@@ -6,8 +6,8 @@ using Base.Test
 
 ex = MinFinder.MultipleMinimaProblems.examples
 
-function test_multiple(problem::MinFinder.MultipleMinimaProblems.OptimizationProblem,
-    seed::Int=1; kwargs...)
+function test_multiple(problem::MinFinder.MultipleMinimaProblems.OptimizationProblem;
+    seed::Int=1, kwargs...)
     @printf "%s, seed=%s \n" problem.name seed
 
     srand(seed)
@@ -29,7 +29,7 @@ end
 
 test_multiple(ex["Rosenbrock"])
 test_multiple(ex["Camel"])
-#test_multiple(ex["Rastrigin"], 6)
+test_multiple(ex["Rastrigin"], seed=1)
 test_multiple(ex["Shekel5"])
 test_multiple(ex["Shekel7"])
 test_multiple(ex["Shekel10"])

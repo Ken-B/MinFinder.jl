@@ -4,14 +4,14 @@ module MultipleMinimaProblems
 # http://www2.compute.dtu.dk/~kajm/Test_ex_forms/test_ex.html
 using Optim #for DifferentiableFunction
 
-immutable OptimizationProblem
+type OptimizationProblem
     name::ASCIIString
-    f::Optim.DifferentiableFunction
-    l::Vector
-    u::Vector
-    minima # Vector with all local minima
+    f :: Optim.DifferentiableFunction
+    l :: Vector{Float64}
+    u :: Vector{Float64}
+    minima :: Vector{Vector{Float64}} # Vector with all local minima
     # glob_x::Vector{Float64} # set of global minimum points
-    glob_f::AbstractFloat # global minimum function value
+    glob_f :: Float64 # global minimum function value
 end
 
 examples = Dict{ASCIIString, OptimizationProblem}()

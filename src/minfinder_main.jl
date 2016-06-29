@@ -1,3 +1,4 @@
+# TODO: Optim.minimum converts to Float64 + test Float32 on Optim
 # TODO: is the check that a new minima was already found correct (norm<tol)?
 # TODO: the 2008 paper introduces non-gradient based checking rules. Thus, a
 #        derivative-free MinFinder could be implement that also uses derivative-
@@ -15,27 +16,27 @@ SearchPoint{T}(x::Vector{T}, g::Vector{T}) = SearchPoint(x, g, convert(T, NaN))
 SearchPoint{T}(x::Vector{T}) = SearchPoint(x, Vector{T}())
 
 # Check starting point `a` against SearchPoint `b` that could be either another
-# starting point or found minima.
-function isvalidpoint{T}(a::SearchPoint{T}, b::SearchPoint{T}, dist)
-    #StatsBase.L2dist(a.x, b.x) > dist && dot(a.x - b.x, a.g - b.g) < 0
-    s = zero(T)
-    t = zero(T)
+# starting point or a found minima.
+function hascondition{T}(a::SearchPoint{T}, b::SearchPoint{T}, threshold)
+    #StatsBase.L2dist(a.x, b.x) < dist && dot(a.x - b.x, a.g - b.g) > 0
+    dist = zero(T)
+    grad = zero(T)
     for i in eachindex(a.x)
         dx = a.x[i] - b.x[i]
-        s += dx * dx
-        t += dx * (a.g[i] - b.g[i])
+        dist += dx * dx
+        grad += dx * (a.g[i] - b.g[i])
     end
-    return sqrt(s) > dist && t < 0
+    sqrt(dist) < threshold && grad > 0
 end
-function isvalidpoint{T}(p::SearchPoint{T}, v::Vector{SearchPoint{T}}, dist)
-    valid = true
+function hascondition{T}(p::SearchPoint{T}, v::Vector{SearchPoint{T}}, dist)
+    condition = false
     for q in v
-        if !isvalidpoint(p, q, dist)
-            valid = false
+        if hascondition(p, q, dist)
+            condition = true
             break
         end
     end
-    valid
+    condition
 end
 
 """
@@ -76,7 +77,7 @@ Other options:
 polish: Perform final optimization on each found minima?
 local_tol: tolerance level for local searches
 polish_tol: tolerance level for final polish of minima
-distmin: discard minima is closer than distmin to found minima
+dist_unique: discard minima is closer than dist_unique to found minima
 distpolish: same for final minima polish
 max_algo_steps: maximum number of minfinder steps (each with N points sampled)
 show_trace: show progress
@@ -96,11 +97,11 @@ function Optim.optimize{T <: AbstractFloat}(
     local_xtol = (polish ? sqrt(eps(T)) : eps(T)),
     local_ftol = (polish ? sqrt(eps(T)^(2/3)) : eps(T)^(2/3)),
     local_grtol = (polish ? sqrt(eps(T)^(2/3)) : eps(T)^(2/3)),
-    #method::Optim.Optimizer = Optim.ConjugateGradient,
+    #method::Optim.Optimizer = Optim.ConjugateGradient(),
     polish_xtol = eps(T),
     polish_ftol = eps(T)^(2/3),
     polish_grtol = eps(T)^(2/3),
-    distmin = sqrt(local_xtol),
+    dist_unique = sqrt(local_xtol),
     distpolish = sqrt(polish_xtol))
 
     @assert length(l) == length(u)
@@ -146,17 +147,16 @@ function Optim.optimize{T <: AbstractFloat}(
         empty!(startpoints)
         dim = length(l)
         for _ = 1:N
-            x = l + rand(dim) .* (u - l)
+            x = l + rand(T, dim) .* (u - l)
             df.g!(x, g) # no function value required for checking rule
             all_g_calls += 1
             p = SearchPoint(x, copy(g))
 
-            # check each point before accepting as starting point
-            if !isempty(minima) # Note there's no typical_distance without minima
-                # condition 1: check against all other starting points
-                isvalidpoint(p, startpoints, typical_distance) || continue
-                # condition 2: check against previously found minima
-                isvalidpoint(p, minima, min_distance) || continue
+            if !isempty(minima) # Otherwise no `typical_distance`
+                # condition 1: check against previously found minima
+                hascondition(p, minima, min_distance) && continue
+                # condition 2: check against all other starting points
+                hascondition(p, startpoints, typical_distance) && continue
             end
             push!(startpoints, p)
         end
@@ -174,10 +174,11 @@ function Optim.optimize{T <: AbstractFloat}(
 
         for p in startpoints
             # Check start point again in case minima found at current iteration
-            isvalidpoint(p, iterminima, min_distance) || continue
+            hascondition(p, iterminima, min_distance) && continue
 
-            result = optimize(df, p.x, l, u, Fminbox();#, method;
-                        xtol=local_xtol, ftol=local_ftol, rtol=local_grtol)
+            @show p.x, l, u
+            result = optimize(df, p.x, l, u, Fminbox());#, method;
+                        #xtol=local_xtol, ftol=local_ftol, rtol=local_grtol)
             searches    += 1
             all_f_calls += Optim.f_calls(result)
             all_g_calls += Optim.g_calls(result)
@@ -189,23 +190,30 @@ function Optim.optimize{T <: AbstractFloat}(
                 converges += 1
 
                 # Update typical search distance (by streaming average)
-                typical_distance = (typical_distance * (searches - 1) +
-                    norm(p.x - x, 2)) / searches
+                typical_distance = (typical_distance * (converges - 1) +
+                    norm(p.x - x, 2)) / converges
 
                 # add to minima if not found earlier
-                minfound = false
+                unique_min = true
                 for m in minima
-                    if norm(x - m.x, 2) < distmin
-                        minfound = true
+                    if norm(x - m.x, 2) < dist_unique
+                        unique_min = false
                         break
                     end
                 end
-                minfound && continue
+                unique_min || continue
+
+                # Update minimum distance between found minima
+                if length(minima) >= 1
+                    closest_dist = minimum([norm(m.x - x, 2) for m in minima])
+                    min_distance = min(min_distance, closest_dist)
+                end
 
                 df.g!(x, g) # gradient not given with optimize result
                 all_g_calls += 1
                 push!(iterminima, SearchPoint(x, copy(g), val))
                 push!(minima,     SearchPoint(x, copy(g), val))
+
 
                 min_distance = min(min_distance, norm(p.x - x, 2))
 
@@ -234,14 +242,14 @@ function Optim.optimize{T <: AbstractFloat}(
             hasconverged = Optim.converged(result)
 
             # Check if not converged to another final optimization minima
-            minfound = false
+            new_min = true
             for h in polishminina
                 if norm(x - h.x,2) < distpolish
-                    minfound = true
+                    new_min = false
                     break
                 end
             end
-            if !minfound
+            if new_min
                 df.g!(x, g)
                 all_g_calls += 1
                 push!(polishminina, SearchPoint(x, copy(g), val))
@@ -253,13 +261,13 @@ function Optim.optimize{T <: AbstractFloat}(
         end
     end #if polish
 
-    finalminima = ifelse(polish, polishminina, minima)
+    finalminima = polish ? polishminina : minima
 
     return FminfinderOptimizationResults(
         l,
         u,
-        map(m -> m.x, finalminima),
-        map(m -> m.g, finalminima),
+        Vector{T}[m.x for m in finalminima],
+        Vector{T}[m.g for m in finalminima],
         all_f_calls,
         all_g_calls,
         searches,
