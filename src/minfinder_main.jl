@@ -1,16 +1,17 @@
+# TODO: refactor out show_trace with macro's?
 # TODO: Optim.minimum converts to Float64 + test Float32 on Optim
-# TODO: is the check that a new minima was already found correct (norm<tol)?
+# TODO: add Sobol.jl for low dispersion start points
 # TODO: the 2008 paper introduces non-gradient based checking rules. Thus, a
 #        derivative-free MinFinder could be implement that also uses derivative-
 #        free local searches
-# TODO: add parallel computing for launching searches
+# TODO: add searches in parallel
 # TODO: add more tests
 
 "Type for both the starting point and resulting minima of a local search."
 immutable SearchPoint{T}
-   x::Vector{T} # point in parameter space
-   g::Vector{T} # gradient at point `x` (can be `nothing`)
-   val::T       # function value at point `x`
+   x   :: Vector{T} # point in parameter space
+   g   :: Vector{T} # gradient at point `x` (can be `nothing`)
+   val :: T
 end
 SearchPoint{T}(x::Vector{T}, g::Vector{T}) = SearchPoint(x, g, convert(T, NaN))
 SearchPoint{T}(x::Vector{T}) = SearchPoint(x, Vector{T}())
@@ -38,6 +39,14 @@ function hascondition{T}(p::SearchPoint{T}, v::Vector{SearchPoint{T}}, dist)
     end
     condition
 end
+
+"""Define stopping rule of the paper. In short, create a series of binomial
+events from 1 to N. The variance of this series goes slowly to zero.
+Compare this value with `stoplevel` at the latest iteration when a minima
+was found."""
+#doublebox(n::Int) = var([StatsBase.rand_binom(i, .5)/i for i=1:n])
+#StatsBase.rand_binom does not work with julia v0.2.1, so sum bernoulli"""
+doublebox(n::Int) = var([sum(round(Int, rand(i)))/i for i = 1:n])
 
 """
 Implementation based on the papers (not on the accompanying code):
@@ -88,25 +97,26 @@ function Optim.optimize{T <: AbstractFloat}(
     u::Array{T},
     ::Fminfinder;
     enrich = 1.1,
-    Nmax::Integer = 250,
+    Nmax::Integer = 100,
     Ninit::Integer = 20,
     exhaustive = 0.5,
     max_algo_steps::Integer = 1_000,
     show_trace::Bool = false,
     polish::Bool = true,
-    local_xtol = (polish ? sqrt(eps(T)) : eps(T)),
-    local_ftol = (polish ? sqrt(eps(T)^(2/3)) : eps(T)^(2/3)),
-    local_grtol = (polish ? sqrt(eps(T)^(2/3)) : eps(T)^(2/3)),
+    local_xtol  = (polish ? sqrt(eps(T)) : eps(T)),
+    local_ftol  = (polish ? T(sqrt(eps(T)^(2/3))) : T(eps(T)^(2/3))),
+    local_grtol = (polish ? T(sqrt(eps(T)^(2/3))) : T(eps(T)^(2/3))),
     #method::Optim.Optimizer = Optim.ConjugateGradient(),
     polish_xtol = eps(T),
-    polish_ftol = eps(T)^(2/3),
-    polish_grtol = eps(T)^(2/3),
+    polish_ftol = T(eps(T)^(2/3)),
+    polish_grtol= T(eps(T)^(2/3)),
     dist_unique = sqrt(local_xtol),
-    distpolish = sqrt(polish_xtol))
+    distpolish  = sqrt(polish_xtol))
 
     @assert length(l) == length(u)
 
-    # Initiate
+    ## Initiate ##
+    #------------#
     N = Ninit # number of starting point samples
     typical_distance = zero(T) # typical distance between start and its minima
     min_distance = convert(T, Inf) #for use in ValidPoint: min distance between minima
@@ -115,12 +125,14 @@ function Optim.optimize{T <: AbstractFloat}(
     minima = Vector{SearchPoint{T}}() # found minima
     polishminina = similar(minima) # mimina after final polish
     iterminima   = similar(minima) #minima found during one MinFinder iteration
-    startpoints  = similar(minima) #starting points for local minimizations
 
-    x   = similar(l) # temporary function point input
-    val = zero(T) # temporary function value
-    g   = similar(l) # temporary function gradient at point
-    p   = SearchPoint(x, g, val) #temporary SearchPoint
+    minimizer = similar(l)
+    g         = similar(l)
+    val       = convert(T, NaN)
+
+    startpoints = similar(minima) #starting points for local minimizations
+    sample_x    = similar(l) # temporary function point input
+    sample_g    = similar(l) # temporary function gradient at point
 
     all_f_calls = 0 #number of total function evaluations
     all_g_calls = 0 #number of total gradient evaluations
@@ -128,29 +140,26 @@ function Optim.optimize{T <: AbstractFloat}(
     searches    = 0 #number of local minimizations
     converges   = 0 #number of converged searches
 
-    # Define stopping rule of the paper. In short, create a series of binomial
-    # events from 1 to N. The variance of this series goes slowly to zero.
-    # Compare this value with `stoplevel` at the latest iteration when a minima
-    # was found.
-    # doublebox(n::Int) = var([StatsBase.rand_binom(i, .5)/i for i=1:n])
-    # StatsBase.rand_binom does not work with julia v0.2.1, so sum bernoulli
-    doublebox(n::Int) = var([sum(round(Int, rand(i)))/i for i = 1:n])
-
     if show_trace
         @printf "############### minfinder ############### \n"
         @printf "Steps  N    Searches   Function Calls   Minima \n"
         @printf "-----  ---  --------   --------------   ------ \n"
     end
 
+    # main MinFinder algorithm loop
+    while (doublebox(N) > stoplevel) & (algo_steps < max_algo_steps)
+        algo_steps += 1
+        empty!(iterminima)
 
-    function sample_check!(startpoints) # Sampling and checking step
+        ## sample startpoints ##
+        #----------------------#
         empty!(startpoints)
         dim = length(l)
         for _ = 1:N
-            x = l + rand(T, dim) .* (u - l)
-            df.g!(x, g) # no function value required for checking rule
+            sample_x = l + rand(T, dim) .* (u - l)
+            df.g!(sample_x, sample_g) # no function value required for checking rule
             all_g_calls += 1
-            p = SearchPoint(x, copy(g))
+            p = SearchPoint(sample_x, copy(sample_g))
 
             if !isempty(minima) # Otherwise no `typical_distance`
                 # condition 1: check against previously found minima
@@ -160,14 +169,6 @@ function Optim.optimize{T <: AbstractFloat}(
             end
             push!(startpoints, p)
         end
-    end
-
-    # main MinFinder algorithm loop
-    while (doublebox(N) > stoplevel) & (algo_steps < max_algo_steps)
-        algo_steps += 1
-
-        sample_check!(startpoints)
-        empty!(iterminima)
 
         # Enrichment for next iteration
         length(startpoints) < N/2 && (N = min(round(Int, N * enrich), Nmax))
@@ -176,27 +177,27 @@ function Optim.optimize{T <: AbstractFloat}(
             # Check start point again in case minima found at current iteration
             hascondition(p, iterminima, min_distance) && continue
 
-            @show p.x, l, u
-            result = optimize(df, p.x, l, u, Fminbox());#, method;
-                        #xtol=local_xtol, ftol=local_ftol, rtol=local_grtol)
+            result = optimize(df, p.x, l, u, Fminbox();#, method;
+                        xtol=local_xtol, ftol=local_ftol, rtol=local_grtol)
             searches    += 1
             all_f_calls += Optim.f_calls(result)
             all_g_calls += Optim.g_calls(result)
-            x            = Optim.minimizer(result)
-            val          = Optim.minimum(result)
             hasconverged = Optim.converged(result)
 
             if hasconverged
                 converges += 1
 
+                minimizer = Optim.minimizer(result)
+                val = convert(T, Optim.minimum(result))# type stability issue with Optim
+
                 # Update typical search distance (by streaming average)
                 typical_distance = (typical_distance * (converges - 1) +
-                    norm(p.x - x, 2)) / converges
+                    norm(p.x - minimizer, 2)) / converges
 
                 # add to minima if not found earlier
                 unique_min = true
                 for m in minima
-                    if norm(x - m.x, 2) < dist_unique
+                    if norm(minimizer - m.x, 2) < dist_unique
                         unique_min = false
                         break
                     end
@@ -205,17 +206,14 @@ function Optim.optimize{T <: AbstractFloat}(
 
                 # Update minimum distance between found minima
                 if length(minima) >= 1
-                    closest_dist = minimum([norm(m.x - x, 2) for m in minima])
+                    closest_dist = minimum([norm(m.x - minimizer, 2) for m in minima])
                     min_distance = min(min_distance, closest_dist)
                 end
 
-                df.g!(x, g) # gradient not given with optimize result
+                df.g!(minimizer, g) # gradient not given with optimize result
                 all_g_calls += 1
-                push!(iterminima, SearchPoint(x, copy(g), val))
-                push!(minima,     SearchPoint(x, copy(g), val))
-
-
-                min_distance = min(min_distance, norm(p.x - x, 2))
+                push!(iterminima, SearchPoint(minimizer, copy(g), val))
+                push!(minima,     SearchPoint(minimizer, copy(g), val))
 
                 # Update stoplevel TODO is this at correct place?
                 stoplevel = exhaustive * doublebox(N)
@@ -237,22 +235,22 @@ function Optim.optimize{T <: AbstractFloat}(
             searches    += 1
             all_f_calls += Optim.f_calls(result)
             all_g_calls += Optim.g_calls(result)
-            x            = Optim.minimizer(result)
-            val          = Optim.minimum(result)
+            minimizer    = Optim.minimizer(result)
             hasconverged = Optim.converged(result)
+            val = convert(T, Optim.minimum(result)) # type stability issue with Optim
 
             # Check if not converged to another final optimization minima
             new_min = true
             for h in polishminina
-                if norm(x - h.x,2) < distpolish
+                if norm(minimizer - h.x,2) < distpolish
                     new_min = false
                     break
                 end
             end
             if new_min
-                df.g!(x, g)
+                df.g!(minimizer, g)
                 all_g_calls += 1
-                push!(polishminina, SearchPoint(x, copy(g), val))
+                push!(polishminina, SearchPoint(minimizer, copy(g), val))
             end
         end
 
@@ -263,11 +261,11 @@ function Optim.optimize{T <: AbstractFloat}(
 
     finalminima = polish ? polishminina : minima
 
-    return FminfinderOptimizationResults(
+    return FminfinderOptimizationResults{T}(
         l,
         u,
         Vector{T}[m.x for m in finalminima],
-        Vector{T}[m.g for m in finalminima],
+        [m.val for m in finalminima],
         all_f_calls,
         all_g_calls,
         searches,
@@ -286,7 +284,7 @@ type FminfinderOptimizationResults{T} <: Optim.OptimizationResults
     initial_lower :: Vector{T}
     initial_upper :: Vector{T}
     minima        :: Vector{Vector{T}}
-    f_minima      :: Vector{Vector{T}}
+    f_minima      :: Vector{T}
     f_calls       :: Int
     g_calls       :: Int
     searches      :: Int
@@ -304,11 +302,13 @@ function Base.show(io::IO, r::FminfinderOptimizationResults)
     println(io, "Fminbox optimizatio result with $(length(Optim.minimum(r))) minima.")
 end
 
- Optim.iterations(r::FminfinderOptimizationResults) = r.N
   Optim.minimizer(r::FminfinderOptimizationResults) = r.minima
     Optim.minimum(r::FminfinderOptimizationResults) = r.f_minima
   Optim.converged(r::FminfinderOptimizationResults) = r.converges > 0
 Optim.lower_bound(r::FminfinderOptimizationResults) = r.initial_lower
 Optim.upper_bound(r::FminfinderOptimizationResults) = r.initial_upper
      Optim.method(r::FminfinderOptimizationResults) = "Fminfinder"
-iteration_limit_reached(r::FminfinderOptimizationResults) = r.N_equals_Nmax
+    Optim.f_calls(r::FminfinderOptimizationResults) = r.f_calls
+    Optim.g_calls(r::FminfinderOptimizationResults) = r.g_calls
+#Optim.iterations(r::FminfinderOptimizationResults) = r.N
+#Optim.iteration_limit_reached(r::FminfinderOptimizationResults) = r.N_equals_Nmax
