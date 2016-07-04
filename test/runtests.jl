@@ -2,7 +2,6 @@ println("Testing MinFinder started.")
 using MinFinder
 using Base.Test
 
-@test 1 == 1
 
 ex = MinFinder.MultipleMinimaProblems.examples
 
@@ -32,6 +31,10 @@ test_multiple(ex["Camel"])
 test_multiple(ex["Rastrigin"], seed=1)
 test_multiple(ex["Shekel5"])
 test_multiple(ex["Shekel7"])
-test_multiple(ex["Shekel10"])
+test_multiple(ex["Shekel10"], seed=2)
 
+println("Rosenbrock Float32")
+f32min = Optim.minimum(optimize(ex["Rosenbrock"].f, [-5f0, -5f0], [5f0, 5f0], Fminfinder()))
+@test isa(f32min, Float32)
+@test_approx_eq [0f0] f32min
 println("minfinder test successful")
