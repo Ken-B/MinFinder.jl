@@ -35,6 +35,6 @@ test_multiple(ex["Shekel10"], seed=2)
 
 println("Rosenbrock Float32")
 f32min = Optim.minimum(optimize(ex["Rosenbrock"].f, [-5f0, -5f0], [5f0, 5f0], Fminfinder()))
-@test isa(f32min, Float32)
-@test_approx_eq [0f0] f32min
+@test eltype(f32min) == Float32
+@test_approx_eq_eps [0f0] f32min 1e-8
 println("minfinder test successful")
