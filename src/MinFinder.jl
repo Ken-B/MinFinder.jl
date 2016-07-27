@@ -2,10 +2,14 @@ module MinFinder
 
     using Optim
 
-    export minfinder
+    #import Optim: optimize
+
+    export optimize, Fminfinder
+
+    immutable Fminfinder <: Optim.Optimizer
+    end
 
     include("minfinder_main.jl")
-
     include(joinpath("problems", "multiple_minima.jl"))
 
 end # module

@@ -4,14 +4,14 @@ module MultipleMinimaProblems
 # http://www2.compute.dtu.dk/~kajm/Test_ex_forms/test_ex.html
 using Optim #for DifferentiableFunction
 
-immutable OptimizationProblem
+type OptimizationProblem
     name::ASCIIString
-    f::Optim.DifferentiableFunction 
-    l::Vector
-    u::Vector
-    minima# Vector with all local minima
-    # glob_x::Vector{Float64} # set of global minimum points 
-    glob_f::FloatingPoint # global minimum function value
+    f :: Optim.DifferentiableFunction
+    l :: Vector{Float64}
+    u :: Vector{Float64}
+    minima :: Vector{Vector{Float64}} # Vector with all local minima
+    # glob_x::Vector{Float64} # set of global minimum points
+    glob_f :: Float64 # global minimum function value
 end
 
 examples = Dict{ASCIIString, OptimizationProblem}()
@@ -34,7 +34,7 @@ examples["Rosenbrock"] = OptimizationProblem(
         end),
     [-2., -2],
     [2.,2],
-    {[1.,1.]},
+    Vector[[1.,1.]],
     0.)
 
 ## Camel ##
@@ -54,8 +54,8 @@ examples["Camel"] = OptimizationProblem(
         end),
     [-5., -5],
     [5., 5],
-    {[-0.0898416,0.712656],[0.089839,-0.712656], [-1.6071,-0.568651], 
-       [1.70361,-0.796084], [1.6071,0.568652], [-1.70361,0.796084]},
+    Vector[[-0.0898416,0.712656],[0.089839,-0.712656], [-1.6071,-0.568651],
+       [1.70361,-0.796084], [1.6071,0.568652], [-1.70361,0.796084]],
     -1.03163)
 
 ## Rastrigin ##
@@ -75,7 +75,7 @@ examples["Rastrigin"] = OptimizationProblem(
         end),
     [-1., -1],
     [1., 1],
-    {[0.0,0.0],[0.34692,0.0],[-0.34693,0.0],[0.69384,0.0],[-0.69385,0.0],
+    Vector[[0.0,0.0],[0.34692,0.0],[-0.34693,0.0],[0.69384,0.0],[-0.69385,0.0],
      [0.99999,0.0],[-1.0,0.0],[0.0,0.34692],[0.34692,0.34692],
      [-0.34693,0.34692],[0.69384,0.34692],[-0.69385,0.34692],[0.99999,0.34692],
      [-1.0,0.34692],[0.0,-0.34693],[0.34692,-0.34693],[-0.34693,-0.34693],
@@ -86,7 +86,7 @@ examples["Rastrigin"] = OptimizationProblem(
      [-0.69385,-0.69385],[0.99999,-0.69385],[-1.0,-0.69385],[0.0,0.99999],
      [0.34692,0.99999],[-0.34693,0.99999],[0.69384,0.99999],[-0.69385,0.99999],
      [0.99999,0.99999],[-1.0,0.99999],[0.0,-1.0],[0.34692,-1.0],[-0.34693,-1.0],
-     [0.69384,-1.0],[-0.69385,-1.0],[0.99999,-1.0],[-1.0,-1.0]},
+     [0.69384,-1.0],[-0.69385,-1.0],[0.99999,-1.0],[-1.0,-1.0]],
     -2.)
 
 ## Shekel ##
@@ -104,11 +104,11 @@ const shekel_A =[4 4 4 4;
                  7 3.6 7 3.6]
 const shekel_c = [.1 .2 .2 .4 .4 .6 .3 .7 .5 .5]
 
-shekel(x;m=5)=-sum([1/(norm(x - vec(shekel_A[i,:]),2)^2+shekel_c[i]) for i=1:m])
+shekel(x;m=5)=-sum([1/(norm(x - vec(shekel_A[i,:]), 2)^2 + shekel_c[i]) for i=1:m])
 function shekel_g!(x::Vector, g; m=5)
     #length(x) == 4 || error("input needs to be 4-dimensional")
     for j = 1:4
-        g[j] = sum([2*(x[j] - shekel_A[i,j]) / 
+        g[j] = sum([2*(x[j] - shekel_A[i,j]) /
             (norm(x - vec(shekel_A[i,:]),2)^2 + shekel_c[i])^2 for i=1:m])
     end
     return nothing
@@ -116,7 +116,7 @@ end
 function shekel_fg!(x::Vector, g; m=5)
     #length(x) == 4 || error("input needs to be 4-dimensional")
     for j = 1:4
-        g[j] = sum([2*(x[j] - shekel_A[i,j]) / 
+        g[j] = sum([2*(x[j] - shekel_A[i,j]) /
             (norm(x - vec(shekel_A[i,:]),2)^2 + shekel_c[i])^2 for i=1:m])
     end
     return -sum([1/(norm(x - vec(shekel_A[i,:]),2)^2 + shekel_c[i]) for i=1:m])
@@ -127,9 +127,9 @@ examples["Shekel5"] = OptimizationProblem(
     Optim.DifferentiableFunction(shekel,shekel_g!,shekel_fg!),
     zeros(4),
     10*ones(4),
-    {[4.00003,4.00013,4.00003,4.00013],[1.00013,1.00015,1.00013,1.00015],
+    Vector[[4.00003,4.00013,4.00003,4.00013],[1.00013,1.00015,1.00013,1.00015],
      [5.99874,6.00028,5.99874,6.00028],[3.00179,6.99833,3.00179,6.99833],
-     [7.99958,7.99964,7.99958,7.99964]},
+     [7.99958,7.99964,7.99958,7.99964]],
     -10.1532)
 
 examples["Shekel7"] = OptimizationProblem(
@@ -138,10 +138,10 @@ examples["Shekel7"] = OptimizationProblem(
         (x,g)->shekel_fg!(x,g;m=7)),
     zeros(4),
     10*ones(4),
-    {[4.00057,4.00068,3.99948,3.9996],[1.00023,1.00027,1.00018,1.00022],
+    Vector[[4.00057,4.00068,3.99948,3.9996],[1.00023,1.00027,1.00018,1.00022],
      [3.0009,7.00064,3.00036,7.0001],[5.9981,6.00008,5.99732,5.9993],
      [4.99422,4.99499,3.00606,3.00682],[2.0048,8.99168,2.00462,8.99149],
-     [7.99951,7.99962,7.99949,7.9996]},
+     [7.99951,7.99962,7.99949,7.9996]],
     -10.4029)
 
 examples["Shekel10"] = OptimizationProblem(
@@ -150,11 +150,11 @@ examples["Shekel10"] = OptimizationProblem(
         (x,g)->shekel_fg!(x,g;m=10)),
     zeros(4),
     10*ones(4),
-    {[1.00036,1.0003,1.00031,1.00025],[3.00127,7.00022,3.00073,6.99968],
+    Vector[[1.00036,1.0003,1.00031,1.00025],[3.00127,7.00022,3.00073,6.99968],
      [6.00557,2.01001,6.00437,2.0088],[5.99901,5.99728,5.99823,5.9965],
      [4.00074,4.00059,3.99966,3.9995],[7.99947,7.99945,7.99946,7.99943],
      [4.99487,4.99398,3.00755,3.00666],[6.99163,3.59557,6.99065,3.5946],
-     [2.0051,8.99129,2.00491,8.9911],[7.98677,1.01223,7.98644,1.0119]},
+     [2.0051,8.99129,2.00491,8.9911],[7.98677,1.01223,7.98644,1.0119]],
      -10.5364)
 
 end # module
